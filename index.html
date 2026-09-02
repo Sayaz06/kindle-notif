@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Notifikasi WS</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Notif WS">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: #fff; color: #000;
+      font-family: Georgia, "Times New Roman", serif;
+      -webkit-text-size-adjust: 100%;
+      min-height: 100vh;
+    }
+    body { padding: 16px; max-width: 420px; margin: 0 auto; }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    h1 { font-size: 1.3rem; text-align: center; margin: 16px 0 8px; }
+    .sub { text-align: center; font-size: 0.78rem; color: #555; margin-bottom: 20px; }
+
+    /* ── INPUT PIN ── */
+    .pin-input {
+      display: block; width: 100%; padding: 12px;
+      font-size: 1.4rem; text-align: center; letter-spacing: 0.4em;
+      border: 2px solid #000; border-radius: 6px;
+      margin: 12px 0; outline: none;
+    }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: block; width: 100%; padding: 12px 8px; margin: 6px 0;
+      font-size: 1rem; font-weight: bold; text-align: center;
+      border: 2px solid #000; background: #fff; color: #000;
+      cursor: pointer; border-radius: 6px;
+    }
+    .btn:active { background: #000; color: #fff; }
+    .btn-primary { background: #000; color: #fff; }
+    .btn-primary:active { background: #333; }
+    .btn-danger { border-color: #c00; color: #c00; }
+    .btn-danger:active { background: #c00; color: #fff; }
+
+    /* ── MSG ── */
+    .msg { font-size: 0.82rem; text-align: center; min-height: 1.2em; margin: 4px 0; }
+    .error { color: #c00; }
+
+    /* ── NOTIF LIST ── */
+    #notif-count-label {
+      font-size: 1rem; font-weight: bold; text-align: center;
+      margin: 12px 0 6px;
+    }
+    #notif-list {
+      margin: 8px 0 16px;
+    }
+    .notif-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; margin: 6px 0;
+      border: 1.5px solid #ccc; border-radius: 8px;
+      background: #fafafa;
+    }
+    .notif-name {
+      font-size: 1rem; font-weight: bold; color: #000;
+    }
+    .notif-ts {
+      font-size: 0.72rem; color: #888; margin-top: 2px;
+    }
+    .btn-padam {
+      padding: 7px 14px; font-size: 0.82rem; font-weight: bold;
+      background: #000; color: #fff; border: none; border-radius: 6px;
+      cursor: pointer; white-space: nowrap;
+    }
+    .btn-padam:active { background: #333; }
+
+    #empty-msg {
+      text-align: center; color: #888; font-size: 0.9rem;
+      margin: 40px 0; display: none;
+    }
+
+    /* ── GUIDE NOTE ── */
+    .guide-note {
+      font-size: 0.72rem; color: #555; line-height: 1.5;
+      margin: 10px 0 16px; padding: 8px;
+      background: #f9f9f9; border-radius: 6px; border: 1px solid #ddd;
+    }
+
+    /* ── LOADING ── */
+    #loading-msg {
+      text-align: center; color: #888; font-size: 0.9rem; margin: 30px 0;
+    }
+
+    /* ── PADAM SEMUA ── */
+    #btn-padam-semua {
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════ LOGIN ══════════ -->
+  <div id="screen-login" class="screen active">
+    <h1>📬 Notifikasi WS</h1>
+    <p class="sub">Semak &amp; padam notifikasi WhatsApp</p>
+    <input id="pin-input" class="pin-input" type="password"
+           inputmode="numeric" maxlength="6" placeholder="PIN" autocomplete="off">
+    <button id="btn-login" class="btn btn-primary">Masuk</button>
+    <div id="login-err" class="msg error"></div>
+  </div>
+
+  <!-- ══════════ UTAMA ══════════ -->
+  <div id="screen-main" class="screen">
+    <h1>📬 Notifikasi WS</h1>
+    <p class="sub" id="user-label"></p>
+
+    <div class="guide-note">
+      Sekiranya terdapat lebih daripada satu perbualan aktif dalam tempoh yang sama, notifikasi akan dipaparkan sebagai <strong>"WhatsApp"</strong> dan bukannya nama pengirim sebenar. Walaupun demikian, notifikasi sebegini tetap memerlukan perhatian — sila semak WhatsApp anda. Sekiranya didapati ia berpunca daripada kumpulan yang kurang relevan, sila <strong>redam (mute)</strong> kumpulan tersebut bagi mengelakkan gangguan notifikasi pada masa hadapan.
+    </div>
+
+    <div id="loading-msg">Memuatkan...</div>
+    <div id="notif-count-label" style="display:none;"></div>
+    <div id="notif-list"></div>
+    <div id="empty-msg">Tiada notifikasi baharu.</div>
+
+    <button id="btn-padam-semua" class="btn btn-danger" style="display:none;">🗑 Padam Semua</button>
+    <button id="btn-muat-semula" class="btn" style="margin-top:4px;">↺ Muat Semula</button>
+    <button id="btn-logout" class="btn btn-danger" style="margin-top:16px;">Log Keluar</button>
+    <div id="main-err" class="msg error"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
+  <script>
+    // ── Firebase Config ──
+    var firebaseConfig = {
+      apiKey: "AIzaSyAGLX_xxH_dQ06epX4XCXtuSHN0DwZFMjA",
+      authDomain: "stress-auti-action.firebaseapp.com",
+      projectId: "stress-auti-action",
+      storageBucket: "stress-auti-action.firebasestorage.app",
+      messagingSenderId: "792580618622",
+      appId: "1:792580618622:web:f0efb1d630e795584d5b2f"
+    };
+    firebase.initializeApp(firebaseConfig);
+    var auth = firebase.auth();
+    var db   = firebase.firestore();
+
+    var ADMIN_EMAIL = 'adha86614@gmail.com';
+    var currentUser = null;
+    var _wsUnsub    = null;
+    var _wsDocs     = [];
+
+    // ── Helper ──
+    function show(id) {
+      ['screen-login','screen-main'].forEach(function(s) {
+        document.getElementById(s).className = 'screen' + (s === id ? ' active' : '');
+      });
+    }
+    function setErr(id, msg) { document.getElementById(id).textContent = msg || ''; }
+    function fmtTs(ts) {
+      if (!ts) return '';
+      var d = new Date(ts);
+      var pad = function(n) { return n < 10 ? '0'+n : n; };
+      return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + ' ' +
+             pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    // ── Subscribe notif ──
+    function subscribeNotif(uid) {
+      if (_wsUnsub) { _wsUnsub(); _wsUnsub = null; }
+      _wsUnsub = db.collection('users').doc(uid)
+        .collection('ws_notification')
+        .onSnapshot(function(snap) {
+          var raw = [];
+          snap.forEach(function(d) {
+            var x = d.data();
+            if (x.active === true) {
+              var rawFrom = (x.from || '').replace(/\s+/g, ' ').trim();
+              var displayFrom = rawFrom || '—';
+              var keyFrom = displayFrom.toLowerCase();
+              raw.push({ id: d.id, from: displayFrom, fromKey: keyFrom, message: x.message || '', ts: x.ts || 0 });
+            }
+          });
+          raw.sort(function(a,b) { return b.ts - a.ts; });
+
+          // Dedupe 5000ms
+          var seen = {};
+          _wsDocs = [];
+          raw.forEach(function(d) {
+            var key = d.fromKey;
+            if (seen[key] === undefined) {
+              seen[key] = d.ts;
+              _wsDocs.push(d);
+            } else {
+              var diff = Math.abs(seen[key] - d.ts);
+              if (diff > 5000) { _wsDocs.push(d); }
+              seen[key] = d.ts;
+            }
+          });
+
+          renderNotif();
+        }, function(e) { setErr('main-err', 'Ralat: ' + e.message); });
+    }
+
+    function stopNotif() {
+      if (_wsUnsub) { _wsUnsub(); _wsUnsub = null; }
+      _wsDocs = [];
+    }
+
+    // ── Render senarai notif ──
+    function renderNotif() {
+      document.getElementById('loading-msg').style.display = 'none';
+      var list = document.getElementById('notif-list');
+      list.innerHTML = '';
+
+      // Group by fromKey
+      var grouped = {};
+      var groupOrder = [];
+      _wsDocs.forEach(function(d) {
+        var key = d.fromKey;
+        if (!grouped[key]) {
+          grouped[key] = { display: d.from, ts: d.ts, docs: [] };
+          groupOrder.push(key);
+        }
+        grouped[key].docs.push(d);
+      });
+
+      var countEl = document.getElementById('notif-count-label');
+      var emptyEl = document.getElementById('empty-msg');
+      var padamSemua = document.getElementById('btn-padam-semua');
+
+      if (groupOrder.length === 0) {
+        countEl.style.display = 'none';
+        emptyEl.style.display = 'block';
+        padamSemua.style.display = 'none';
+        return;
+      }
+
+      emptyEl.style.display = 'none';
+      countEl.style.display = 'block';
+      countEl.textContent = '📬 ' + groupOrder.length + ' notifikasi baharu';
+      padamSemua.style.display = 'block';
+
+      groupOrder.forEach(function(key) {
+        var g = grouped[key];
+        var item = document.createElement('div');
+        item.className = 'notif-item';
+
+        var info = document.createElement('div');
+        var nameEl = document.createElement('div');
+        nameEl.className = 'notif-name';
+        nameEl.textContent = g.display;
+        var tsEl = document.createElement('div');
+        tsEl.className = 'notif-ts';
+        tsEl.textContent = fmtTs(g.ts);
+        info.appendChild(nameEl);
+        info.appendChild(tsEl);
+
+        var btn = document.createElement('button');
+        btn.className = 'btn-padam';
+        btn.textContent = 'Padam';
+        btn.addEventListener('click', function() {
+          padamGroup(key, g.docs, btn);
+        });
+
+        item.appendChild(info);
+        item.appendChild(btn);
+        list.appendChild(item);
+      });
+    }
+
+    // ── Padam satu group ──
+    function padamGroup(key, docs, btnEl) {
+      if (!currentUser) return;
+      btnEl.disabled = true;
+      btnEl.textContent = '...';
+      var uid = currentUser.uid;
+      var promises = docs.map(function(d) {
+        return db.collection('users').doc(uid).collection('ws_notification').doc(d.id).delete();
+      });
+      Promise.all(promises).catch(function(e) {
+        setErr('main-err', 'Ralat padam: ' + e.message);
+        btnEl.disabled = false;
+        btnEl.textContent = 'Padam';
+      });
+    }
+
+    // ── Padam semua ──
+    function padamSemua() {
+      if (!currentUser || !_wsDocs.length) return;
+      var uid = currentUser.uid;
+      var btn = document.getElementById('btn-padam-semua');
+      btn.disabled = true;
+      btn.textContent = '...';
+      var promises = _wsDocs.map(function(d) {
+        return db.collection('users').doc(uid).collection('ws_notification').doc(d.id).delete();
+      });
+      Promise.all(promises).then(function() {
+        btn.disabled = false;
+        btn.textContent = '🗑 Padam Semua';
+      }).catch(function(e) {
+        setErr('main-err', 'Ralat: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = '🗑 Padam Semua';
+      });
+    }
+
+    // ── Login ──
+    document.getElementById('btn-login').addEventListener('click', function() {
+      var pin = document.getElementById('pin-input').value.trim();
+      if (!pin) { setErr('login-err', 'Sila masukkan PIN'); return; }
+      setErr('login-err', '');
+      this.disabled = true;
+      var self = this;
+      auth.signInWithEmailAndPassword(ADMIN_EMAIL, pin)
+        .then(function(cred) {
+          currentUser = cred.user;
+          document.getElementById('pin-input').value = '';
+          document.getElementById('user-label').textContent = currentUser.email || '';
+          show('screen-main');
+          subscribeNotif(currentUser.uid);
+          self.disabled = false;
+        })
+        .catch(function(e) {
+          setErr('login-err', 'PIN salah atau ralat: ' + e.message);
+          self.disabled = false;
+        });
+    });
+
+    document.getElementById('pin-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') document.getElementById('btn-login').click();
+    });
+
+    // ── Logout ──
+    document.getElementById('btn-logout').addEventListener('click', function() {
+      stopNotif();
+      auth.signOut().then(function() {
+        currentUser = null;
+        _wsDocs = [];
+        document.getElementById('notif-list').innerHTML = '';
+        document.getElementById('notif-count-label').style.display = 'none';
+        document.getElementById('empty-msg').style.display = 'none';
+        document.getElementById('btn-padam-semua').style.display = 'none';
+        document.getElementById('loading-msg').style.display = 'block';
+        setErr('main-err', '');
+        show('screen-login');
+      });
+    });
+
+    // ── Padam semua button ──
+    document.getElementById('btn-padam-semua').addEventListener('click', padamSemua);
+
+    // ── Muat semula ──
+    document.getElementById('btn-muat-semula').addEventListener('click', function() {
+      if (currentUser) {
+        document.getElementById('loading-msg').style.display = 'block';
+        document.getElementById('notif-list').innerHTML = '';
+        document.getElementById('notif-count-label').style.display = 'none';
+        document.getElementById('empty-msg').style.display = 'none';
+        stopNotif();
+        subscribeNotif(currentUser.uid);
+      }
+    });
+
+    // ── Auth state ──
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        currentUser = user;
+        document.getElementById('user-label').textContent = user.email || '';
+        show('screen-main');
+        subscribeNotif(user.uid);
+      } else {
+        currentUser = null;
+        show('screen-login');
+      }
+    });
+
+    // ── Service Worker ──
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(function(e) {
+        console.warn('SW error:', e);
+      });
+    }
+  </script>
+</body>
+</html>
